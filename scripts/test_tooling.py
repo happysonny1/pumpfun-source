@@ -33,6 +33,42 @@ class RelocationTargetTests(unittest.TestCase):
         self.assertEqual(report['entries'][0]['target_section'], '.rodata')
 
 
+class MathComparisonPatternTests(unittest.TestCase):
+    def analyze(self, instructions):
+        # Keep the window above the analyzer's five-arithmetic-op threshold.
+        prefix = struct.pack('<BBhi', 0x07, 1, 0, 1) * 4
+        blob = prefix + b''.join(instructions)
+        elf = SimpleNamespace(b=blob, entries=[0], hi=len(blob), funcs=[])
+        return deep_section_analysis.analyze_math_patterns(elf)['math_intensive_windows'][0]
+
+    def test_unsigned_comparisons_accept_immediate_and_register_forms(self):
+        for arithmetic in (0x07, 0x0f, 0x17, 0x1f, 0x27, 0x2f):
+            for comparison in (0x25, 0x2d, 0x35, 0x3d, 0xa5, 0xad, 0xb5, 0xbd):
+                with self.subTest(arithmetic=hex(arithmetic), comparison=hex(comparison)):
+                    report = self.analyze([
+                        struct.pack('<BBhi', arithmetic, 0x21, 0, 1),
+                        struct.pack('<BBhi', comparison, 0x31, 0, 0),
+                    ])
+                    self.assertEqual(report['overflow_checks'], 1)
+
+    def test_unrelated_comparisons_and_intervening_instructions_stay_excluded(self):
+        add = struct.pack('<BBhi', 0x07, 1, 0, 1)
+        move = struct.pack('<BBhi', 0xb7, 2, 0, 1)
+        for comparison in (0x15, 0x1d, 0x55, 0x5d, 0x65, 0x6d, 0xc5, 0xcd):
+            with self.subTest(comparison=hex(comparison)):
+                report = self.analyze([add, struct.pack('<BBhi', comparison, 0x31, 0, 0)])
+                self.assertEqual(report['overflow_checks'], 0)
+        report = self.analyze([add, move, struct.pack('<BBhi', 0x2d, 0x31, 0, 0)])
+        self.assertEqual(report['overflow_checks'], 0)
+
+    def test_captured_pump_subtract_compare_is_counted(self):
+        # Pump file offset 0xd278: sub64 r1, r8; jge r1, r6, +7.
+        blob = (analyze.ROOT / 'evidence/original/pump/deployed.so').read_bytes()
+        pair = blob[0xd278:0xd288]
+        self.assertEqual(pair.hex(), '1f810000000000003d61070000000000')
+        self.assertEqual(self.analyze([pair])['overflow_checks'], 1)
+
+
 class InstructionLogNameTests(unittest.TestCase):
     def names(self, name):
         blob = (analyze.ROOT / 'evidence/original' / name / 'deployed.so').read_bytes()
