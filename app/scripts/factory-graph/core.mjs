@@ -862,6 +862,14 @@ export async function verifyGraph(root, outputRelative, options = {}) {
   const manifest = JSON.parse(
     await readFile(join(output, "MANIFEST.json"), "utf8"),
   );
+  if (
+    !manifest ||
+    typeof manifest !== "object" ||
+    Array.isArray(manifest) ||
+    manifest.schemaVersion !== GRAPH_VERSION ||
+    !Array.isArray(manifest.files)
+  )
+    throw new Error("unsupported graph manifest schema");
   const expected = new Set([
     "MANIFEST.json",
     ...manifest.files.map((entry) => entry.path),
