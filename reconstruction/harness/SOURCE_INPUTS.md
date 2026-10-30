@@ -20,3 +20,9 @@ Receipts remain available for failed compiler runs as well.
 This identifies crate source inputs, not the entire build environment: registry
 packages, compiler/toolchain files and environment variables are not covered.
 A receipt alone does not prove reproducibility or bytecode equivalence.
+
+`win.py show` disassembles a private copy of the candidate bytes loaded by
+`Cand`, so a rebuild replacing the original candidate path cannot mix new
+assembly labels with old comparison tokens and symbols. The temporary copy is
+removed after successful or failed disassembly. This binds diagnostic bytes;
+it does not establish source provenance or program equivalence.

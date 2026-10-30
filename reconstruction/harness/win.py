@@ -9,7 +9,7 @@
 Diff tokens use the scorer's normalization (internal call imm + section-pointer lddw masked).
 '-' = original only, '+' = candidate only. Default candidate = base/current/unstripped.so.
 """
-import argparse, difflib, re, subprocess, sys
+import argparse, difflib, re, subprocess, sys, tempfile
 from pathlib import Path
 from collections import Counter
 from llvm_tools import objdump
@@ -70,6 +70,14 @@ class Cand:
 
     def fn(self, start, size):
         return body(self.blob, self.secs, start, size)
+
+    def disassembly(self, start, size):
+        # A concurrent build may replace self.path after this candidate was
+        # loaded. Disassemble the same bytes used by fn/tokens and symbols.
+        with tempfile.TemporaryDirectory(prefix='pump-win-') as temporary:
+            snapshot = Path(temporary) / 'candidate.so'
+            snapshot.write_bytes(self.blob)
+            return objdump_text(snapshot, start, start + size)
 
     def grams(self, start, size):
         key = (start, size)
@@ -163,7 +171,7 @@ def cmd_show(a):
         print(f"  cand {s:#x} {n:6d}B ratio={r:.4f}  {demangle(nm)}")
     r, j, s, n, nm = best[0]
     oi = insns(w['raw'], st, ORIG_SECS); ci = insns(cand.fn(s, n), s, cand.secs)
-    ot = objdump_text(resolve_original(BASE / 'original.so'), st, st + w['bytes']); ctx = objdump_text(cand.path, s, s + n)
+    ot = objdump_text(resolve_original(BASE / 'original.so'), st, st + w['bytes']); ctx = cand.disassembly(s, n)
     sm = difflib.SequenceMatcher(None, [x[2] for x in oi], [x[2] for x in ci], autojunk=False)
     print(f"\n--- diff vs {demangle(nm)} @ {s:#x} (ratio {sm.ratio():.4f}; '-' original, '+' candidate)")
     C = a.context
