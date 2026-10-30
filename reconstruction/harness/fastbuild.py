@@ -18,7 +18,7 @@ Usage: fastbuild.py --src <crate dir with Cargo.toml/Cargo.lock/src[/recovered]>
 - Stack diagnostics return ok=false with build.log and stack_warnings. Diagnostic callers
   gated on ok (including exactsol-introspection capture.py) consequently skip IR extraction.
 """
-import argparse, hashlib, json, os, shutil, subprocess, sys, time, tomllib, fcntl, tempfile
+import argparse, hashlib, json, os, re, shutil, subprocess, sys, time, tomllib, fcntl, tempfile
 from contextlib import contextmanager
 from pathlib import Path
 from build_process import run_compiler, validate_timeout
@@ -49,12 +49,27 @@ def sha(p):
     return hashlib.sha256(Path(p).read_bytes()).hexdigest()
 
 
+def table_start(text, name):
+    """Find a real literal table header, excluding comments and string contents."""
+    pattern = r'(?m)^[ \t]*\[' + re.escape(name) + r'\][ \t]*(?:#[^\n]*)?$'
+    for match in re.finditer(pattern, text):
+        try:
+            # A header-looking line inside a multiline value has an incomplete
+            # TOML prefix; a real table starts after complete preceding values.
+            tomllib.loads(text[:match.start()])
+        except tomllib.TOMLDecodeError:
+            continue
+        return match.start()
+    raise ValueError('missing literal manifest table: ' + name)
+
+
 def stage(src: Path, ws: Path):
     text = (src / 'Cargo.toml').read_text()
     parsed = tomllib.loads(text)
     assert parsed.get('workspace') == {} and set(parsed.get('profile', {})) == {'release'}, 'unsupported manifest layout'
-    ps = text.index('[profile.release]'); wsi = text.index('[workspace]')
-    assert ps < wsi and not text[wsi + len('[workspace]'):].strip()
+    ps = table_start(text, 'profile.release'); wsi = table_start(text, 'workspace')
+    if ps >= wsi or tomllib.loads(text[wsi:]) != {'workspace': {}}:
+        raise ValueError('expected release profile followed by a final empty workspace table')
     profile = text[ps:wsi].strip() + '\n'
     crate_text = text[:ps].rstrip() + '\n'
     crate = ws / 'programs/pump'
