@@ -73,7 +73,9 @@ not a captured request format:
   and legacy scalar facts. A `facts: null` record explicitly represents a local
   row that cannot be mapped. Duplicate IDs and unresolved authors fail admission.
 - Separate update records with explicit author/callout references and visibility.
-  Only visible, nondeleted author replies join. Rows are sorted newest first;
+  Only visible, nondeleted author replies join. A joined update with a non-null
+  `parentMessageId` must match its explicit callout reference; conflicting parents
+  fail admission. Null parent knowledge remains null. Rows are sorted newest first;
   null times sort last and equal times use descending code-unit ID order. This
   tie/null policy is local, not a claim about upstream. The supplied update list
   may be a materialized window: social counters remain supplied facts and are

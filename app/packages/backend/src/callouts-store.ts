@@ -436,6 +436,8 @@ export class CalloutsStore {
       // Non-author replies and moderation-hidden rows never enter the public update relation.
       if (row.authorId !== callout.authorId || row.hidden || row.deleted)
         continue;
+      if (row.body.parentMessageId !== null && row.body.parentMessageId !== row.calloutId)
+        fail("update parent does not match its callout reference");
       const rows = this.updates.get(row.calloutId) ?? [];
       rows.push(row.body);
       this.updates.set(row.calloutId, rows);

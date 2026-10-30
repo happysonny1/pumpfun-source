@@ -635,3 +635,36 @@ test('public callout events cannot postdate the materialization checkpoint',()=>
   assert.throws(()=>new CalloutsStore(updates),/observedAt/);
   assert.doesNotThrow(()=>new CalloutsStore(dataset()));
 });
+
+test("author update joins reject a conflicting explicit parent message", () => {
+  for (const parent of ["b", "missing-parent", ""]) {
+    const data = dataset();
+    data.updates[0].body.parentMessageId = parent;
+    assert.throws(() => new CalloutsStore(data), /update parent.*callout/i);
+  }
+});
+
+test("matching and unknown update parents retain root, list and quoted HTTP projections", async () => {
+  const data = dataset();
+  data.updates[0].body.parentMessageId = "a";
+  const groupUpdate = data.updates.find(row => row.calloutId === "b")!;
+  groupUpdate.body.parentMessageId = "b";
+  const app = buildApp([], { calloutsStore: new CalloutsStore(data) });
+  try {
+    const rootResponse = await app.inject({ url: "/v1/callout/a", headers });
+    const listResponse = await app.inject({ url: "/v1/callout/list/author-a", headers });
+    assert.equal(rootResponse.statusCode, 200);
+    assert.equal(listResponse.statusCode, 200);
+    const root = rootResponse.json().callout;
+    const listed = listResponse.json().callouts.find((row: any) => row.calloutId === "a");
+    for (const row of [root, listed]) {
+      assert.equal(row.updates.find((value: any) => value.id === "a-update").parentMessageId, "a");
+      assert.equal(row.updates.find((value: any) => value.id === "z-update").parentMessageId, null);
+      assert.equal(row.updateCount, 20);
+      assert.equal(row.quotedCallout.callout.updates[0].parentMessageId, "b");
+    }
+    assertSchema(rootResponse.json(), responseSchema, "matching update parents", spec);
+  } finally {
+    await app.close();
+  }
+});
