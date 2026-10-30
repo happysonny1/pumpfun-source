@@ -53,11 +53,15 @@ def insns(raw, addr, secs):
 
 def objdump_text(path, start, end):
     txt = subprocess.check_output([objdump(), '-d', '--no-show-raw-insn', f'--start-address={start:#x}', f'--stop-address={end:#x}', str(path)], text=True)
+    # LLVM's BPF/SBF backend prints decimal instruction-slot indices even
+    # though start/stop arguments and the comparison tokens use byte addresses.
+    slots = bool(re.search(r'file format elf64-(?:sbf|bpf)\b', txt))
     d = {}
     for line in txt.splitlines():
         m = re.match(r'^\s*([0-9a-f]+):\s+(.*)$', line)
         if m:
-            d[int(m.group(1), 16)] = re.sub(r'\s+<\.text\+0x[0-9a-f]+>', '', m.group(2).strip())
+            address = int(m.group(1), 10) * 8 if slots else int(m.group(1), 16)
+            d[address] = re.sub(r'\s+<\.text\+0x[0-9a-f]+>', '', m.group(2).strip())
     return d
 
 
