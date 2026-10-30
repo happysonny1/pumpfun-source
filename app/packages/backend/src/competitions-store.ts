@@ -285,6 +285,12 @@ export class CompetitionStore {
       for (const tier of comp.prizes) {
         for (const key of ['rankFrom', 'rankTo'] as const) {
           if (!Number.isFinite(tier[key])) throw new TypeError(`Competition prize ${key} must be finite`);
+          if (!Number.isSafeInteger(tier[key]) || tier[key] < 1) {
+            throw new TypeError(`Competition prize ${key} must be a positive safe integer`);
+          }
+        }
+        if (tier.rankTo < tier.rankFrom) {
+          throw new TypeError('Competition prize rankTo must be greater than or equal to rankFrom');
         }
       }
     }
