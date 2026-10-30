@@ -934,3 +934,44 @@ test('position state timestamps cannot exceed their observation checkpoint',()=>
   }
   assert.doesNotThrow(()=>new PositionsStore(dataset()));
 });
+
+test("position callout joins reject conflicting explicit CAIP-2 chains", () => {
+  for (const [positionChain, calloutChain] of [
+    ["solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp", "eip155:8453"],
+    ["eip155:8453", "eip155:1"],
+  ]) {
+    const data = dataset();
+    const position = data.subjects[0].positions[0].facts;
+    position.chain = positionChain;
+    position.chainId = positionChain.startsWith("solana:") ? 101 : 8453;
+    data.callouts[0].body.chain = calloutChain;
+    assert.throws(() => new PositionsStore(data), /callout.*chain/i);
+  }
+});
+
+test("matching and unavailable callout chain information preserves both HTTP reads", async () => {
+  for (const chain of [undefined, null, "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp"]) {
+    const data = dataset();
+    if (chain === undefined) delete data.callouts[0].body.chain;
+    else data.callouts[0].body.chain = chain;
+    const app = withApp(data);
+    try {
+      for (const path of [
+        "/v1/user-positions/person-a?mints=mint-a",
+        "/v1/user-portfolio/person-a",
+      ]) {
+        const response = await get(app, path);
+        assert.equal(response.statusCode, 200);
+        const row = response.json().positions.find((r: any) => r.coinMint === "mint-a");
+        assert.equal(row.callout.chain, chain);
+        assert.equal(row.callout.updates.length, 5);
+      }
+    } finally {
+      await app.close();
+    }
+  }
+  const data = dataset();
+  delete data.subjects[0].positions[0].facts.chain;
+  data.callouts[0].body.chain = "eip155:8453";
+  assert.doesNotThrow(() => new PositionsStore(data));
+});

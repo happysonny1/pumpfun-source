@@ -379,6 +379,11 @@ export class PositionsStore {
           this.callouts.get(record.calloutId)!.authorId !== subject.id
         )
           fail("callout belongs to another subject");
+        if (record.calloutId !== undefined && facts.chain !== undefined) {
+          const calloutChain = this.callouts.get(record.calloutId)!.body.chain;
+          if (calloutChain != null && calloutChain !== facts.chain)
+            fail("callout chain differs from position chain");
+        }
         if (rowKeys.has(key(facts))) fail("duplicate position identity");
         rowKeys.add(key(facts));
       }

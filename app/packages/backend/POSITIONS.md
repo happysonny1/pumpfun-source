@@ -68,7 +68,9 @@ factory remain unimplemented; string presence is not scope or compatibility.
   callout/coin/public-owner flags. Required quantities, basis, PnL and prices must
   be supplied; nullable values remain null. No financial value is calculated.
 - Separate chain-keyed coin metadata, separate callouts, and a separate update
-  relation. A position can reference only its subject's callout. Live author
+  relation. A position can reference only its subject's callout. If both the
+  position and callout specify CAIP-2 chains, they must match; absent/null chain
+  information remains unknown and is not inferred. Live author
   replies are joined, while deleted/hidden/non-author/non-parent rows are not.
 - Every callout explicitly declares `updatesComplete`. Incomplete joins produce
   empty updates with `updatesApplied: false` on portfolio pages. A mint request
