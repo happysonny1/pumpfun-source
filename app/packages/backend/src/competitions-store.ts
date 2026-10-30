@@ -246,6 +246,18 @@ export class CompetitionStore {
     // the leaderboard store does for its board measures.
     for (const comp of this.competitions) {
       for (const entry of comp.entries) {
+        const roster = comp.kind === 'group' ? (entry.members ?? []) : [];
+        if (new Set(roster.map(member => member.userId)).size !== roster.length)
+          throw new TypeError('Duplicate competition roster member');
+        const tokens = entry.highlightTokens ?? [];
+        const tokenKeys = tokens.map(token => JSON.stringify([token.chainId, token.mint]));
+        if (new Set(tokenKeys).size !== tokens.length)
+          throw new TypeError('Duplicate competition highlight token');
+        for (const token of tokens) {
+          const members = token.members ?? [];
+          if (new Set(members.map(member => member.userId)).size !== members.length)
+            throw new TypeError('Duplicate competition highlight member');
+        }
         for (const key of ['pnlUsd', 'realizedPnlUsd', 'unrealizedPnlUsd',
           'buySpendSol', 'membersFresh', 'lastRefreshedAtMs'] as const) {
           if (!Number.isFinite(entry[key])) throw new TypeError(`Competition entry ${key} must be finite`);

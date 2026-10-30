@@ -145,3 +145,10 @@ cd app/packages/backend
 npx tsx --test test/*.test.ts     # counts grow as operations are added; the run prints the current totals
 ../../node_modules/.bin/tsc --noEmit -p tsconfig.json
 ```
+
+Snapshot admission rejects duplicate group-roster user IDs within an entry, duplicate
+`(chainId, mint)` highlight tokens within an entry, and duplicate member user IDs
+within one token's attribution. Otherwise duplicate rows inflate roster size or
+repeat the same token/contribution in the served reel. These are local integrity
+rules: the same mint on different chains and a member on different tokens remain
+independent. No aggregate PnL is recalculated or deduplicated silently.
