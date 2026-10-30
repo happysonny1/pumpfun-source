@@ -10,6 +10,7 @@ Diff tokens use the scorer's normalization (internal call imm + section-pointer 
 '-' = original only, '+' = candidate only. Default candidate = base/current/unstripped.so.
 """
 import argparse, difflib, re, subprocess, sys, tempfile
+from contextlib import contextmanager
 from pathlib import Path
 from collections import Counter
 from llvm_tools import objdump
@@ -71,13 +72,22 @@ class Cand:
     def fn(self, start, size):
         return body(self.blob, self.secs, start, size)
 
-    def disassembly(self, start, size):
-        # A concurrent build may replace self.path after this candidate was
-        # loaded. Disassemble the same bytes used by fn/tokens and symbols.
+    @contextmanager
+    def _snapshot(self):
         with tempfile.TemporaryDirectory(prefix='pump-win-') as temporary:
             snapshot = Path(temporary) / 'candidate.so'
             snapshot.write_bytes(self.blob)
+            yield snapshot
+
+    def disassembly(self, start, size):
+        """Disassemble the same bytes used for symbols, tokens and ranking."""
+        with self._snapshot() as snapshot:
             return objdump_text(snapshot, start, start + size)
+
+    def memberships(self):
+        """Filter unmatched windows against the loaded candidate, too."""
+        with self._snapshot() as snapshot:
+            return score(snapshot)
 
     def grams(self, start, size):
         key = (start, size)
@@ -124,7 +134,7 @@ def best_candidates(w, cand, top=3):
 
 
 def cmd_list(a):
-    cand = Cand(a.cand); cur = score(a.cand); rows = []
+    cand = Cand(a.cand); cur = cand.memberships(); rows = []
     for w in original_windows():
         if cur[w['start']]['normalized'] and not a.all:
             continue
