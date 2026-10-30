@@ -108,6 +108,9 @@ unit uses no captured market record as if it were current or complete.
   envelopes bound to operation, dataset, and normalized filter context, with a
   128-bit SHA-256-derived integrity checksum. This is a local opaque token
   format, not an asserted production cursor encoding.
+- Direct store callers' chain and asset-class arrays have set semantics:
+  repeated members do not change selection, cursor context, or per-chain memo
+  counts. The HTTP parser continues to reject repeated list members.
 - New-count counts eligible rows newer than the caller's pinned head. It never
   changes that `since` input. The explicit local memo depth is 25; a single/all
   chain caps globally, while a multi-chain query caps each selected chain and

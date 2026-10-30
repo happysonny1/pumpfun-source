@@ -362,8 +362,8 @@ function contextHash(filters: HomeFeedFilters): string {
   return createHash("sha256")
     .update(
       JSON.stringify({
-        chains: [...filters.chains].sort(),
-        assetClasses: [...filters.assetClasses].sort(),
+        chains: [...new Set(filters.chains)].sort(),
+        assetClasses: [...new Set(filters.assetClasses)].sort(),
         minMarketCapUsd: filters.minMarketCapUsd ?? null,
         maxMarketCapUsd: filters.maxMarketCapUsd ?? null,
         minCostBasisUsd: filters.minCostBasisUsd ?? null,
@@ -748,7 +748,8 @@ export class HomeFeedStore {
       if (key[1] !== sinceKey[1]) return BigInt(key[1]) > BigInt(sinceKey[1]);
       return key[2].localeCompare(sinceKey[2]) < 0;
     });
-    const explicitChains = request.filters.chains;
+    // Direct callers may repeat a member; selection uses set membership too.
+    const explicitChains = [...new Set(request.filters.chains)];
     let newCount: number;
     let capped: boolean;
     if (explicitChains.length > 1) {
