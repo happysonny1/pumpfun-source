@@ -149,6 +149,11 @@ def archive_previous_outputs(out: Path):
 
 def build(src: Path, work: Path, out: Path, quiet=False, recipe=None, timeout=None):
     validate_timeout(timeout)
+    src = src.resolve(); work = work.resolve(); out = out.resolve()
+    # Reject overlap before workspace_lock can create a directory or lock in
+    # the source tree (and thereby change its source-input receipt).
+    if src == work or src in work.parents or work in src.parents or src == out or src in out.parents:
+        raise ValueError('source must not overlap the build workspace or contain output')
     with workspace_lock(work):
         return _build_locked(src, work, out, quiet=quiet, recipe=recipe, timeout=timeout)
 
@@ -157,9 +162,6 @@ def _build_locked(src: Path, work: Path, out: Path, quiet=False, recipe=None, ti
 
     recipe = recipe or DEFAULT_RECIPE
     R = RECIPES[recipe]; triple = R['triple']
-    src = src.resolve(); work = work.resolve(); out = out.resolve()
-    if src == work or src in work.parents or work in src.parents or src == out or src in out.parents:
-        raise ValueError('source must not overlap the build workspace or contain output')
     source_inputs = snapshot(src)
     work.mkdir(parents=True, exist_ok=True)
     ws = work / 'ws'
