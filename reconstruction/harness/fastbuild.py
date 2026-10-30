@@ -17,6 +17,8 @@ Usage: fastbuild.py --src <crate dir with Cargo.toml/Cargo.lock/src[/recovered]>
   fails unless the linker hook ran in this build.
 - Stack diagnostics return ok=false with build.log and stack_warnings. Diagnostic callers
   gated on ok (including exactsol-introspection capture.py) consequently skip IR extraction.
+- Cargo manifests, lockfiles and saved compiler logs use UTF-8 independently of the host locale.
+  Non-UTF-8 consoles escape unrepresentable diagnostic characters without changing the saved log.
 """
 import argparse, hashlib, json, os, re, shutil, subprocess, sys, time, tomllib, fcntl, tempfile
 from contextlib import contextmanager
@@ -50,6 +52,12 @@ def sha(p):
     return hashlib.sha256(Path(p).read_bytes()).hexdigest()
 
 
+def echo_diagnostics(text):
+    # Keep the saved log in UTF-8; a legacy console may need escaped characters.
+    encoding = getattr(sys.stdout, 'encoding', None) or 'utf-8'
+    sys.stdout.write(text.encode(encoding, errors='backslashreplace').decode(encoding))
+
+
 def table_start(text, name):
     """Find a real literal table header, excluding comments and string contents."""
     pattern = r'(?m)^[ \t]*\[' + re.escape(name) + r'\][ \t]*(?:#[^\n]*)?$'
@@ -65,7 +73,7 @@ def table_start(text, name):
 
 
 def stage(src: Path, ws: Path):
-    text = (src / 'Cargo.toml').read_text()
+    text = (src / 'Cargo.toml').read_text(encoding='utf-8')
     parsed = tomllib.loads(text)
     assert parsed.get('workspace') == {} and set(parsed.get('profile', {})) == {'release'}, 'unsupported manifest layout'
     ps = table_start(text, 'profile.release'); wsi = table_start(text, 'workspace')
@@ -82,11 +90,11 @@ def stage(src: Path, ws: Path):
                     '--exclude', '/target/', '--exclude', '/Cargo.toml', '--exclude', '/Cargo.lock',
                     str(src) + '/', str(crate) + '/'], check=True)
     def put(p, t):
-        if not p.exists() or p.read_text() != t:
-            p.write_text(t)
+        if not p.exists() or p.read_text(encoding='utf-8') != t:
+            p.write_text(t, encoding='utf-8')
     put(crate / 'Cargo.toml', crate_text)
     put(ws / 'Cargo.toml', '[workspace]\nmembers = ["programs/pump"]\nresolver = "2"\n\n' + profile)
-    lock = (src / 'Cargo.lock').read_text()
+    lock = (src / 'Cargo.lock').read_text(encoding='utf-8')
     put(ws / 'Cargo.lock', lock)
     return crate
 
@@ -95,7 +103,7 @@ def local_packages(crate: Path):
     """Package names of the staged crate and of every path crate nested in it."""
     names = set()
     for manifest in crate.rglob('Cargo.toml'):
-        name = tomllib.loads(manifest.read_text()).get('package', {}).get('name')
+        name = tomllib.loads(manifest.read_text(encoding='utf-8')).get('package', {}).get('name')
         if name:
             names.add(name)
     return names
@@ -214,10 +222,10 @@ def _build_locked(src: Path, work: Path, out: Path, quiet=False, recipe=None, ti
     finally:
         slot.close()
     dt = time.time() - t0
-    (out / 'build.log').write_text(r.stdout)
+    (out / 'build.log').write_text(r.stdout, encoding='utf-8')
     if timed_out or r.returncode != 0:
         if not quiet:
-            sys.stdout.write(r.stdout[-6000:])
+            echo_diagnostics(r.stdout[-6000:])
         return {'ok': False, 'timed_out': timed_out, 'source_sha256': source_inputs['sha256'], 'recipe': recipe, 'seconds': round(dt, 1), 'log': str(out / 'build.log')}
     # SBF frames are 4 KiB: any "Stack offset ... exceeded max offset" warning means the program can fault at
     # runtime (the original runs, so its functions fit). Such a build must never be delivered or integrated.
